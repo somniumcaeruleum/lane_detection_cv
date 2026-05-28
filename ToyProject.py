@@ -81,7 +81,7 @@ class ToyProject:
 
             # debug: Stage 1
             if self.debug == 1:
-                # Display the original and the BEV side-by-side (optional, for visualization)
+                # Display the BEV vs Thresholded (optional, for visualization)
                 # Note: we resize them to fit on smaller screens
                 display_TL = cv2.resize(bev_img, (400, 300))
                 display_TR = cv2.resize(color_thresholded, (400, 300))
@@ -112,18 +112,18 @@ class ToyProject:
                     break
 
             # draw lanes
-            left_fitx, right_fitx, ploty, _, __= fit_lanes(color_thresholded, point_left, point_right)
+            left_fitx, right_fitx, ploty, left_fit, right_fit= fit_lanes(color_thresholded, point_left, point_right)
 
             # central line & handle undetected lane
             central_fitx = []
             if left_lane == False and right_lane:
-                # left_fitx = right_fitx-self.dist
-                left_fitx, _ = self.offset_curve(right_fitx, ploty, 2 * self.dist, side='left')
+                # left = right-self.dist
+                left_fitx, _ = self.offset_curve(right_fitx, ploty, right_fit, 2 * self.dist, side='left')
             if right_lane == False and left_lane:
-                # right_fitx = left_fitx+self.dist
-                right_fitx, _ = self.offset_curve(left_fitx, ploty, 2 * self.dist, side='right')
+                # right = left+self.dist
+                right_fitx, _ = self.offset_curve(left_fitx, ploty, left_fit, 2 * self.dist, side='right')
             if len(right_fitx):
-                central_fitx, _ = self.offset_curve(right_fitx, ploty, self.dist, side='left')
+                central_fitx, _ = self.offset_curve(right_fitx, ploty, right_fit, self.dist, side='left')
 
             # real world scaling
             if len(left_fitx):
@@ -179,7 +179,7 @@ class ToyProject:
         if fig_debug3 is not None:
             plt.close(fig_debug3)
     
-    def offset_curve(self, x, y, d, side='left', smooth=True):
+    def offset_curve(self, x, y, coeffs, d, side='left', smooth=True):
         """
         Compute an offset curve at perpendicular distance d from the input curve.
 
@@ -189,7 +189,9 @@ class ToyProject:
 
         Parameters
         ----------
-        x, y : array-like
+        coeffs : array-like *** decreasing order of power ***
+            coefficients of y-x graph
+        y : array-like
             Coordinates of the original curve (ordered points).
         d : float
             Offset distance. side='left' offsets to the left of travel direction.
@@ -205,35 +207,18 @@ class ToyProject:
         xo, yo : ndarray
             Coordinates of the offset curve, same length as the input.
         """
-        x = np.asarray(x, dtype=float)
-        y = np.asarray(y, dtype=float)
+        # Calculate first derivative
+        derivative_coeffs = np.polyder(coeffs)
 
-        if len(x) < 2:
-            return np.array([]), np.array([])
+        # derivative[y]=derivative of x(y)
+        derivative = np.polyval(derivative_coeffs, y)
+        
+        # unit normal vector (perpendicular to tangent (derivative, 1))
+        norm = np.sqrt(derivative**2 + 1)
+        nx, ny = -1.0 / norm, derivative / norm
 
-        if side not in ('left', 'right'):
-            raise ValueError("side must be 'left' or 'right'")
-
-        if smooth and len(x) >= 4:
-            # Fit a parametric spline ONLY to obtain smooth derivatives.
-            # Evaluate them at the ORIGINAL parameter values u, so the point
-            # count and one-to-one correspondence are preserved.
-            tck, u = splprep([x, y], s=0)
-            dx, dy = splev(u, tck, der=1)
-            dx, dy = np.asarray(dx), np.asarray(dy)
-        else:
-            # Finite differences (central, with forward/backward at the ends)
-            dx = np.gradient(x)
-            dy = np.gradient(y)
-
-        # Unit normal vector (perpendicular to the tangent at each point)
-        length = np.hypot(dx, dy)
-        length[length == 0] = 1e-12  # avoid division by zero
-        nx = -dy / length
-        ny =  dx / length
-
-        sign = 1 if side == 'left' else -1
-        xo = x + sign * d * nx
-        yo = y + sign * d * ny
-
+        sign = -1 if side == 'right' else 1
+        dx = sign * d * nx
+        dy = sign * d * ny
+        xo, yo = x + dx, y + dy
         return xo, yo
