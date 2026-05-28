@@ -182,22 +182,28 @@ class ToyProject:
     def offset_curve(self, x, y, d, side='left', smooth=True):
         """
         Compute an offset curve at perpendicular distance d from the input curve.
-        
+
+        Every input point is preserved one-to-one in the output: each point is
+        translated along its own unit normal by the offset distance d. No
+        resampling or change in point count occurs.
+
         Parameters
         ----------
         x, y : array-like
             Coordinates of the original curve (ordered points).
         d : float
-            Offset distance. The minimum distance between curves equals |d|.
+            Offset distance. side='left' offsets to the left of travel direction.
         side : str
             'left' or 'right' relative to curve direction.
         smooth : bool
-            If True, fits a spline for smoother tangent estimation.
-        
+            If True, fits a parametric spline to estimate smooth tangents/normals
+            at the original points (derivatives only — the points are NOT moved
+            onto the spline).
+
         Returns
         -------
         xo, yo : ndarray
-            Coordinates of the offset curve.
+            Coordinates of the offset curve, same length as the input.
         """
         x = np.asarray(x, dtype=float)
         y = np.asarray(y, dtype=float)
@@ -205,25 +211,29 @@ class ToyProject:
         if len(x) < 2:
             return np.array([]), np.array([])
 
+        if side not in ('left', 'right'):
+            raise ValueError("side must be 'left' or 'right'")
+
         if smooth and len(x) >= 4:
-            # Fit a parametric spline for smooth derivatives
+            # Fit a parametric spline ONLY to obtain smooth derivatives.
+            # Evaluate them at the ORIGINAL parameter values u, so the point
+            # count and one-to-one correspondence are preserved.
             tck, u = splprep([x, y], s=0)
-            u_fine = np.linspace(0, 1, max(len(x), 200))
-            x, y = splev(u_fine, tck)
-            dx, dy = splev(u_fine, tck, der=1)
+            dx, dy = splev(u, tck, der=1)
+            dx, dy = np.asarray(dx), np.asarray(dy)
         else:
-            # Finite differences (central, with forward/backward at ends)
+            # Finite differences (central, with forward/backward at the ends)
             dx = np.gradient(x)
             dy = np.gradient(y)
-        
-        # Unit normal vector (perpendicular to tangent)
+
+        # Unit normal vector (perpendicular to the tangent at each point)
         length = np.hypot(dx, dy)
         length[length == 0] = 1e-12  # avoid division by zero
         nx = -dy / length
         ny =  dx / length
-        
+
         sign = 1 if side == 'left' else -1
         xo = x + sign * d * nx
         yo = y + sign * d * ny
-        
+
         return xo, yo
