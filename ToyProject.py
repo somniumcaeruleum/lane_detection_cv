@@ -20,8 +20,8 @@ from Pure_Pursuit import pure_pursuit
 class ToyProject:
     def __init__(self, input_path, output_path="", debug=False, video_save=False):
         # vertical distance, horizontal distance per pixel
-        self.vertical = 0.208 # y-scale (cm/pixel)
-        self.horizon = 0.190 # x-scale (cm/pixel)
+        self.vertical = 0.376 # y-scale (cm/pixel)
+        self.horizon = 0.159  # x-scale (cm/pixel)
 
         #horizontal distance between left, right lane (pixel)
         self.dist = (85/self.horizon)//2
@@ -56,7 +56,7 @@ class ToyProject:
         self.bev_matrix = cv2.getPerspectiveTransform(pts_src, pts_dst)
 
         fig_debug3, ax_debug3 = None, None
-        if self.debug == 3:
+        if self.debug:
             fig_debug3, ax_debug3 = plt.subplots(figsize=(10, 6))
 
         output = None
@@ -153,15 +153,14 @@ class ToyProject:
                     py = [frame_height*self.vertical - y for _, y in point_right]
                     ax_debug3.scatter(px, py, c='red', s=30, zorder=5)
 
-                ax_debug3.set_xlim(0, 120)
-                ax_debug3.set_ylim(0, 110)
+                ax_debug3.set_xlim(0, 125)
+                ax_debug3.set_ylim(0, 200)
 
                 fig_debug3.canvas.draw()
                 img_bgr = cv2.cvtColor(np.asarray(fig_debug3.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
             
             ### Control: Pure Pursuit
-            vehicle_x, vehicle_y  = frame2bev(frame_width/2, -90/self.vertical, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
-            print(f"Vehicle position in BEV (cm): ({vehicle_x:.2f}, {vehicle_y:.2f})")
+            vehicle_x, vehicle_y  = frame2bev(frame_width/2, frame_height+90/self.vertical, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
             '''
             Returns
             -------
@@ -242,7 +241,7 @@ class ToyProject:
         # Calculate first derivative
         derivative_coeffs = np.polyder(coeffs)
 
-        # derivative[y]=derivative of x(y)
+        # derivative[y]=x'(y)
         derivative = np.polyval(derivative_coeffs, y)
         
         # unit normal vector (perpendicular to tangent (derivative, 1))
