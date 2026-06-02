@@ -12,13 +12,15 @@ from bev import thresholding
 from sliding_window import sliding_window_lane_detect
 from sliding_window import fit_lanes
 
+from frame2bev import frame2bev
+
 from Pure_Pursuit import pure_pursuit
 
 # thresholded -> sliding_window_lane_detect -> plot on reality -> path planning
 class ToyProject:
     def __init__(self, input_path, output_path="", debug=False, video_save=False):
         # vertical distance, horizontal distance per pixel
-        self.vertice = 0.208 # y-scale (cm/pixel)
+        self.vertical = 0.208 # y-scale (cm/pixel)
         self.horizon = 0.190 # x-scale (cm/pixel)
 
         #horizontal distance between left, right lane (pixel)
@@ -78,8 +80,7 @@ class ToyProject:
 
             # debug: Stage 1
             if self.debug:
-                # Display the BEV vs Thresholded (optional, for visualization)
-                # Note: we resize them to fit on smaller screens
+                cv2.polylines(frame, [pts_src.astype(np.int32)], isClosed=True, color=(0, 255, 0), thickness=2)
                 display_TL = cv2.resize(frame, (400, 300))
                 display_TR = cv2.resize(color_thresholded, (400, 300))
                 combined_display = np.hstack((display_TL, display_TR))
@@ -125,31 +126,31 @@ class ToyProject:
                 right_fitx = right_fitx*self.horizon
             if len(central_fitx):
                 central_fitx = central_fitx*self.horizon
-            ploty = ploty*self.vertice
+            ploty = ploty*self.vertical
 
             if len(point_left):
                 for i in range(len(point_left)):
-                    point_left[i] = point_left[i][0]*self.horizon, point_left[i][1]*self.vertice
+                    point_left[i] = point_left[i][0]*self.horizon, point_left[i][1]*self.vertical
             if len(point_right):
                 for i in range(len(point_right)):
-                    point_right[i] = point_right[i][0]*self.horizon, point_right[i][1]*self.vertice
+                    point_right[i] = point_right[i][0]*self.horizon, point_right[i][1]*self.vertical
 
             ### debug: Stage 3
             if self.debug:
                 ax_debug3.cla()
-                ploty_3 = frame_height*self.vertice-ploty
+                ploty_3 = frame_height*self.vertical-ploty
                 show_curves((left_fitx, ploty_3), (right_fitx, ploty_3), (central_fitx, ploty_3),
                             labels=['left', 'right', 'central'], colors=['blue', 'red', 'green'],
                             styles=['-', '-', '-'], title='plotting', ax=ax_debug3)
 
                 if len(point_left):
                     px = [x for x, _ in point_left]
-                    py = [frame_height*self.vertice - y for _, y in point_left]
+                    py = [frame_height*self.vertical - y for _, y in point_left]
                     ax_debug3.scatter(px, py, c='blue', s=30, zorder=5)
 
                 if len(point_right):
                     px = [x for x, _ in point_right]
-                    py = [frame_height*self.vertice - y for _, y in point_right]
+                    py = [frame_height*self.vertical - y for _, y in point_right]
                     ax_debug3.scatter(px, py, c='red', s=30, zorder=5)
 
                 ax_debug3.set_xlim(0, 120)
@@ -159,8 +160,8 @@ class ToyProject:
                 img_bgr = cv2.cvtColor(np.asarray(fig_debug3.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
             
             ### Control: Pure Pursuit
-            vehicle_x = frame_width/2*self.horizon
-            vehicle_y = frame_height*self.vertice + 90
+            vehicle_x, vehicle_y  = frame2bev(frame_width/2, -90/self.vertical, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
+            print(f"Vehicle position in BEV (cm): ({vehicle_x:.2f}, {vehicle_y:.2f})")
             '''
             Returns
             -------
@@ -172,7 +173,7 @@ class ToyProject:
                 Heading error in radians.
             '''
             steering_angle, lookahead_pt, heading_error = pure_pursuit(central_fitx, ploty, vehicle_x, vehicle_y=vehicle_y, lookahead=170.0, wheelbase=55.0)
-            
+
             if self.debug:
 
                 if lookahead_pt == None:
@@ -181,7 +182,7 @@ class ToyProject:
                     print("Lookahead Point can be calculated")
                     print(f"heading error (rad): {heading_error}, steering angle (rad): {steering_angle}")
 
-                    plot_vy = frame_height * self.vertice - vehicle_y
+                    plot_vy = frame_height * self.vertical - vehicle_y
                     circle = Circle((vehicle_x, plot_vy), 170.0,
                                     fill=False, edgecolor='orange', linewidth=1.5)
                     ax_debug3.add_patch(circle)
@@ -189,8 +190,8 @@ class ToyProject:
 
                     if lookahead_pt is not None:
                         lx, ly = lookahead_pt
-                        ax_debug3.scatter([lx], [frame_height * self.vertice - ly],
-                                        c='orange', s=60, zorder=6, marker='x')
+                        ax_debug3.scatter([lx], [frame_height * self.vertical - ly],
+                                        c='purple', s=60, zorder=6, marker='x')
 
                     fig_debug3.canvas.draw()
                     img_bgr = cv2.cvtColor(np.asarray(fig_debug3.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
