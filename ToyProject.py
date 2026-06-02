@@ -160,7 +160,8 @@ class ToyProject:
                 img_bgr = cv2.cvtColor(np.asarray(fig_debug3.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
             
             ### Control: Pure Pursuit
-            vehicle_x, vehicle_y  = frame2bev(frame_width/2, frame_height+90/self.vertical, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
+            vehicle_x, vehicle_y  = frame2bev(frame_width/2, frame_height, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
+            vehicle_y = vehicle_y+90
             '''
             Returns
             -------
