@@ -59,22 +59,16 @@ def pure_pursuit(central_fitx, ploty, vehicle_x, vehicle_y=None,
     # Pure pursuit: delta = arctan(2 * L_wb * sin(alpha) / L_d)
     steering_angle = np.arctan2(2.0 * wheelbase * np.sin(alpha), ld)
 
-    # --- NEW: Heading Error Calculation ---
-    # Calculate the path's tangent at the nearest point.
-    # Since the vehicle heading is assumed strictly forward (0 radians relative to itself),
-    # the heading error is simply the angle of the path's tangent.
-    if len(path_x) > 1:
-        # Index -1 is nearest, Index -2 is the next point forward
-        dx = path_x[-2] - path_x[-1]
-        
-        # Forward is the -y direction (up the image), so dy_forward is positive when moving forward
-        dy_forward = path_y[-1] - path_y[-2] 
-        
-        heading_error = float(np.arctan2(dx, dy_forward))
+    # Path tangent at lookahead point: finite difference toward farthest direction
+    # (decreasing index = increasing forward distance)
+    if idx > 0:
+        dx = path_x[idx] - path_x[idx-1]
+        dy = path_y[idx] - path_y[idx-1]
     else:
-        heading_error = 0.0
-
+        dx, dy = 0.0, 0.0
+    # Vehicle heading is -y image direction; forward_component = -dy in vehicle frame
+    heading_error = float(np.arctan2(dx, -dy))
+    
     steering_angle = -steering_angle
-    heading_error = -heading_error
 
     return steering_angle, (float(path_x[idx]), float(path_y[idx])), heading_error
