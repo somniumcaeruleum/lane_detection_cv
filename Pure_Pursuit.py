@@ -30,7 +30,7 @@ def pure_pursuit(central_fitx, ploty, vehicle_x, vehicle_y=None,
     Returns
     -------
     steering_angle : float
-        Steering angle in radians. Positive = right turn, negative = left turn.
+        Steering angle in radians. Negative = right turn, Positive = left turn.
     lookahead_pt : tuple or None
         (x, y) of the selected lookahead point, or None if path is empty.
     heading_error : float
@@ -74,4 +74,7 @@ def pure_pursuit(central_fitx, ploty, vehicle_x, vehicle_y=None,
     else:
         heading_error = 0.0
 
-    return -steering_angle, (float(path_x[idx]), float(path_y[idx])), -heading_error
+    steering_angle = -steering_angle
+    heading_error = -heading_error
+
+    return steering_angle, (float(path_x[idx]), float(path_y[idx])), heading_error

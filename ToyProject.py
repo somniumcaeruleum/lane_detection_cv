@@ -1,16 +1,16 @@
 from matplotlib import pyplot as plt
-from matplotlib.patches import Circle
 import numpy as np
 import cv2
-from scipy.interpolate import splprep, splev
 
-from debug import show_curves
+from debug import debug_plotting
 
 from bev import raw_to_bev
 from bev import thresholding
 
 from sliding_window import sliding_window_lane_detect
-from sliding_window import fit_lanes
+from sliding_window import fit_lane
+
+from Offset import offset_curve
 
 from frame2bev import frame2bev
 
@@ -57,16 +57,19 @@ class ToyProject:
 
         fig_debug3, ax_debug3 = None, None
         if self.debug:
-            fig_debug3, ax_debug3 = plt.subplots(figsize=(10, 6))
+            plt.ion()
+            fig_debug3, ax_debug3 = plt.subplots(figsize=(5, 5))
 
         output = None
         if self.video_save:
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             resolution = (frame_width, frame_height)
-            #TODO: output resolution
             output = cv2.VideoWriter(self.output_path, fourcc, 24.0, resolution)
         
-        left_lane, right_lane = True, True
+        pre_left_fitx, pre_left_ploty = [], []
+        pre_right_fitx, pre_right_ploty = [], []
+        pre_central_fitx, pre_central_ploty = [], []
+        pre_steering_angle, pre_lookahead_pt, pre_heading_error = 0, (0, -170), 0
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
@@ -104,20 +107,28 @@ class ToyProject:
                 if cv2.waitKey(25) & 0xFF == ord('q'):
                     print("Process interrupted by user.")
                     break
+            
+            left_fitx, left_ploty = [], []
+            right_fitx, right_ploty = [], []
+            central_fitx, central_ploty = [], []
 
-            # draw lanes
-            left_fitx, right_fitx, ploty, left_fit, right_fit= fit_lanes(color_thresholded, point_left, point_right)
+            # trust right lane
+            if len(point_left) <= len(point_right):
+                right_fitx, right_ploty, right_fit = fit_lane(frame.shape[0], point_right)
+                if len(right_fitx):
+                    central_fitx, central_ploty = offset_curve(right_fitx, right_ploty, right_fit, self.dist, side='left')
+                    left_fitx, left_ploty = offset_curve(central_fitx, central_ploty, right_fit, self.dist, side='left')
 
-            # central line & handle undetected lane
-            central_fitx = []
-            if left_lane == False and right_lane and len(right_fitx):
-                # left = right-self.dist
-                left_fitx, _ = self.offset_curve(right_fitx, ploty, right_fit, 2 * self.dist, side='left')
-            if right_lane == False and left_lane and len(left_fitx):
-                # right = left+self.dist
-                right_fitx, _ = self.offset_curve(left_fitx, ploty, left_fit, 2 * self.dist, side='right')
-            if len(right_fitx):
-                central_fitx, _ = self.offset_curve(right_fitx, ploty, right_fit, self.dist, side='left')
+            # trust left lane
+            else:
+                left_fitx, left_ploty, left_fit = fit_lane(frame.shape[0], point_left)
+                if len(left_fitx):
+                    central_fitx, central_ploty = offset_curve(left_fitx, left_ploty, left_fit, self.dist, side='right')
+                    right_fitx, right_ploty = offset_curve(central_fitx, central_ploty, left_fit, self.dist, side='right')
+
+            ### Control: Pure Pursuit
+            vehicle_x, vehicle_y  = frame2bev(frame_width/2, frame_height, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
+            vehicle_y += 90
 
             # real world scaling
             if len(left_fitx):
@@ -126,42 +137,56 @@ class ToyProject:
                 right_fitx = right_fitx*self.horizon
             if len(central_fitx):
                 central_fitx = central_fitx*self.horizon
-            ploty = ploty*self.vertical
+
+            if len(left_ploty) == 0:
+                left_ploty = np.linspace(0, frame.shape[0], 50) #start, end, # of points
+            if len(right_ploty) == 0:
+                right_ploty = np.linspace(0, frame.shape[0], 50) #start, end, # of points
+            if len(central_ploty) == 0:
+                central_ploty = np.linspace(0, frame.shape[0], 50) #start, end, # of points
+
+            left_ploty = left_ploty*self.vertical
+            right_ploty = right_ploty*self.vertical
+            central_ploty = central_ploty*self.vertical
 
             if len(point_left):
                 for i in range(len(point_left)):
-                    point_left[i] = point_left[i][0]*self.horizon, point_left[i][1]*self.vertical
+                    point_left[i] = [point_left[i][0]*self.horizon, point_left[i][1]*self.vertical]
             if len(point_right):
                 for i in range(len(point_right)):
-                    point_right[i] = point_right[i][0]*self.horizon, point_right[i][1]*self.vertical
+                    point_right[i] = [point_right[i][0]*self.horizon, point_right[i][1]*self.vertical]
 
-            ### debug: Stage 3
-            if self.debug:
-                ax_debug3.cla()
-                ploty_3 = frame_height*self.vertical-ploty
-                show_curves((left_fitx, ploty_3), (right_fitx, ploty_3), (central_fitx, ploty_3),
-                            labels=['left', 'right', 'central'], colors=['blue', 'red', 'green'],
-                            styles=['-', '-', '-'], title='plotting', ax=ax_debug3)
+            # front center of car -> 0, 0
+            # vehicle_x, vehicle_y -> 0, 90
+            if len(left_fitx):
+                left_fitx, left_ploty = left_fitx - vehicle_x, left_ploty - vehicle_y+90
+            if len(right_fitx):
+                right_fitx, right_ploty = right_fitx - vehicle_x, right_ploty - vehicle_y+90
+            if len(central_fitx):
+                central_fitx, central_ploty = central_fitx - vehicle_x, central_ploty - vehicle_y+90
 
-                if len(point_left):
-                    px = [x for x, _ in point_left]
-                    py = [frame_height*self.vertical - y for _, y in point_left]
-                    ax_debug3.scatter(px, py, c='blue', s=30, zorder=5)
+            if len(point_left):
+                for i in range(len(point_left)):
+                    point_left[i] = [point_left[i][0]-vehicle_x, point_left[i][1] - vehicle_y+90]
+            if len(point_right):
+                for i in range(len(point_right)):
+                    point_right[i] = [point_right[i][0]-vehicle_x, point_right[i][1] - vehicle_y+90]
 
-                if len(point_right):
-                    px = [x for x, _ in point_right]
-                    py = [frame_height*self.vertical - y for _, y in point_right]
-                    ax_debug3.scatter(px, py, c='red', s=30, zorder=5)
+            vehicle_x, vehicle_y = 0, 90
 
-                ax_debug3.set_xlim(0, 125)
-                ax_debug3.set_ylim(0, 200)
+            # y = -y
+            if len(point_left):
+                for i in range(len(point_left)):
+                    point_left[i][1] = -point_left[i][1]
+            if len(point_right):
+                for i in range(len(point_right)):
+                    point_right[i][1] = -point_right[i][1]
 
-                fig_debug3.canvas.draw()
-                img_bgr = cv2.cvtColor(np.asarray(fig_debug3.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
-            
-            ### Control: Pure Pursuit
-            vehicle_x, vehicle_y  = frame2bev(frame_width/2, frame_height, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
-            vehicle_y = vehicle_y+90
+            left_ploty = -left_ploty
+            central_ploty = -central_ploty
+            right_ploty = -right_ploty
+
+            vehicle_y = -vehicle_y
             '''
             Returns
             -------
@@ -172,37 +197,22 @@ class ToyProject:
             heading_error : float
                 Heading error in radians.
             '''
-            steering_angle, lookahead_pt, heading_error = pure_pursuit(central_fitx, ploty, vehicle_x, vehicle_y=vehicle_y, lookahead=170.0, wheelbase=55.0)
+            steering_angle, lookahead_pt, heading_error = pure_pursuit(central_fitx, central_ploty, vehicle_x, vehicle_y=vehicle_y, lookahead=170.0, wheelbase=55.0)
+
+            # handle undetected situation
+            if len(central_fitx) < 2:
+                left_fitx, left_ploty = pre_left_fitx, pre_left_ploty
+                right_fitx, right_ploty = pre_right_fitx, pre_right_ploty
+                central_fitx, central_ploty = pre_central_fitx, pre_central_ploty
+                steering_angle, lookahead_pt, heading_error = pre_steering_angle, pre_lookahead_pt, pre_heading_error
+            else:
+                pre_left_fitx, pre_left_ploty = left_fitx, left_ploty
+                pre_right_fitx, pre_right_ploty = right_fitx, right_ploty
+                pre_central_fitx, pre_central_ploty = central_fitx, central_ploty
+                pre_steering_angle, pre_lookahead_pt, pre_heading_error = steering_angle, lookahead_pt, heading_error
 
             if self.debug:
-
-                if lookahead_pt == None:
-                    print("Lookahead Point cannot be calculated")
-                else:
-                    print("Lookahead Point can be calculated")
-                    print(f"heading error (rad): {heading_error}, steering angle (rad): {steering_angle}")
-
-                    plot_vy = frame_height * self.vertical - vehicle_y
-                    circle = Circle((vehicle_x, plot_vy), 170.0,
-                                    fill=False, edgecolor='orange', linewidth=1.5)
-                    ax_debug3.add_patch(circle)
-                    circle.set_clip_path(ax_debug3.patch)
-
-                    if lookahead_pt is not None:
-                        lx, ly = lookahead_pt
-                        ax_debug3.scatter([lx], [frame_height * self.vertical - ly],
-                                        c='purple', s=60, zorder=6, marker='x')
-
-                    fig_debug3.canvas.draw()
-                    img_bgr = cv2.cvtColor(np.asarray(fig_debug3.canvas.buffer_rgba()), cv2.COLOR_RGBA2BGR)
-                    cv2.imshow('Plotting', img_bgr)
-
-                    # Wait 25ms and check if the 'q' key is pressed
-                    if cv2.waitKey(25) & 0xFF == ord('q'):
-                        print("Process interrupted by user.")
-                        break
-
-                print()
+                debug_plotting(fig_debug3, ax_debug3, point_left, point_right, left_fitx, left_ploty, right_fitx, right_ploty, central_fitx, central_ploty, vehicle_x, vehicle_y, steering_angle, lookahead_pt, heading_error)
         
         if self.video_save:
             output.release()
@@ -210,47 +220,3 @@ class ToyProject:
         cv2.destroyAllWindows()
         if fig_debug3 is not None:
             plt.close(fig_debug3)
-    
-    def offset_curve(self, x, y, coeffs, d, side='left', smooth=True):
-        """
-        Compute an offset curve at perpendicular distance d from the input curve.
-
-        Every input point is preserved one-to-one in the output: each point is
-        translated along its own unit normal by the offset distance d. No
-        resampling or change in point count occurs.
-
-        Parameters
-        ----------
-        coeffs : array-like *** decreasing order of power ***
-            coefficients of y-x graph
-        y : array-like
-            Coordinates of the original curve (ordered points).
-        d : float
-            Offset distance. side='left' offsets to the left of travel direction.
-        side : str
-            'left' or 'right' relative to curve direction.
-        smooth : bool
-            If True, fits a parametric spline to estimate smooth tangents/normals
-            at the original points (derivatives only — the points are NOT moved
-            onto the spline).
-
-        Returns
-        -------
-        xo, yo : ndarray
-            Coordinates of the offset curve, same length as the input.
-        """
-        # Calculate first derivative
-        derivative_coeffs = np.polyder(coeffs)
-
-        # derivative[y]=x'(y)
-        derivative = np.polyval(derivative_coeffs, y)
-        
-        # unit normal vector (perpendicular to tangent (derivative, 1))
-        norm = np.sqrt(derivative**2 + 1)
-        nx, ny = -1.0 / norm, derivative / norm
-
-        sign = -1 if side == 'right' else 1
-        dx = sign * d * nx
-        dy = sign * d * ny
-        xo, yo = x + dx, y + dy
-        return xo, yo

@@ -117,30 +117,21 @@ def sliding_window_lane_detect(binary_warped, mwindows=6, nwindows=15, margin=60
 
     return point_left, point_right, left_lane, right_lane, out_img
 
-def fit_lanes(frame, point_left, point_right, ldim = 2, rdim = 2):
-    left_fit, right_fit = [], []
+def fit_lane(height, points, dim=2):
+    coef = []
 
-    if len(point_left) == 2:
-        ldim = 1
-    if len(point_right) == 2:
-        rdim = 1
+    if len(points) == 2:
+        dim = 1
 
-    if len(point_left)>ldim:
-        left_fit = np.polyfit([y for x, y in point_left], [x for x, y in point_left], ldim)
-    if len(point_right)>rdim:
-        right_fit = np.polyfit([y for x, y in point_right], [x for x, y in point_right], rdim)
+    if len(points)>dim:
+        coef = np.polyfit([y for x, y in points], [x for x, y in points], dim)
 
-    left_fitx, right_fitx = [], []
+    fitx = []
 
-    ploty = np.linspace(0, frame.shape[0]-1, frame.shape[0])
-    if len(left_fit):
-        left_fitx = left_fit[0]*ploty**(ldim-0)
-        for i in range(1, ldim+1):
-            left_fitx += left_fit[i]*ploty**(ldim-i)
+    ploty = np.linspace(-height//3, height, 50) #start, end, # of points
+    if len(coef):
+        fitx = coef[0]*ploty**(dim-0)
+        for i in range(1, dim+1):
+            fitx += coef[i]*ploty**(dim-i)
 
-    if len(right_fit):
-        right_fitx = right_fit[0]*ploty**(rdim-0)
-        for i in range(1, rdim+1):
-            right_fitx += right_fit[i]*ploty**(rdim-i)
-
-    return left_fitx, right_fitx, ploty, left_fit, right_fit
+    return fitx, ploty, coef
