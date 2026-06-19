@@ -23,9 +23,9 @@ def pure_pursuit(central_fitx, ploty, vehicle_x, vehicle_y=None,
     vehicle_y : float, optional
         Longitudinal vehicle position (cm). Defaults to max(ploty).
     lookahead : float
-        Lookahead distance (cm). Default 30 cm.
+        Lookahead distance (cm).
     wheelbase : float
-        Vehicle wheelbase (cm). Default 26 cm.
+        Vehicle wheelbase (cm).
 
     Returns
     -------
@@ -59,16 +59,21 @@ def pure_pursuit(central_fitx, ploty, vehicle_x, vehicle_y=None,
     # Pure pursuit: delta = arctan(2 * L_wb * sin(alpha) / L_d)
     steering_angle = np.arctan2(2.0 * wheelbase * np.sin(alpha), ld)
 
-    # Path tangent at lookahead point: finite difference toward farthest direction
-    # (decreasing index = increasing forward distance)
-    if idx > 0:
-        dx = path_x[idx] - path_x[idx-1]
-        dy = path_y[idx] - path_y[idx-1]
+    # Compute path tangent at the lookahead point
+    if idx > 0 and idx < len(path_x) - 1:
+        # Tangent vector: derivative of path
+        dx_path = path_x[idx+1] - path_x[idx-1]
+        dy_path = path_y[idx+1] - path_y[idx-1]
+        desired_heading = np.arctan2(dx_path, -dy_path)  # Note: -dy because forward is -y
     else:
-        dx, dy = 0.0, 0.0
-    # Vehicle heading is -y image direction; forward_component = -dy in vehicle frame
-    heading_error = float(np.arctan2(dx, -dy))
-    
+        # Fallback: use direction to lookahead point
+        desired_heading = alpha
+
+    # Vehicle heading is nominally 0 in vehicle frame
+    vehicle_heading = 0.0
+
+    # Heading error: how far vehicle is from desired orientation
+    heading_error = desired_heading - vehicle_heading
     steering_angle = -steering_angle
 
     return steering_angle, (float(path_x[idx]), float(path_y[idx])), heading_error

@@ -4,13 +4,12 @@ import numpy as np
 
 def debug_plotting(fig_debug3, ax_debug3, point_left, point_right, left_fitx, left_ploty, right_fitx, right_ploty, central_fitx, central_ploty, vehicle_x, vehicle_y, steering_angle, lookahead_pt, heading_error):
     ax_debug3.cla()
-
     if len(point_left):
         for i in range(len(point_left)):
-            ax_debug3.plot(point_left[i][0], point_left[i][1], 'b.', markersize=4)
+            ax_debug3.plot(point_left[i][0], point_left[i][1], 'b.', markersize=10)
     if len(point_right):
         for i in range(len(point_right)):
-            ax_debug3.plot(point_right[i][0], point_right[i][1], 'r.', markersize=4)
+            ax_debug3.plot(point_right[i][0], point_right[i][1], 'r.', markersize=10)
 
     if len(left_fitx):
         ax_debug3.plot(left_fitx, left_ploty, 'b-', linewidth=2, label='Left')

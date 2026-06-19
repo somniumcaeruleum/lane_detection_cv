@@ -18,7 +18,7 @@ from Pure_Pursuit import pure_pursuit
 
 # thresholded -> sliding_window_lane_detect -> plot on reality -> path planning
 class ToyProject:
-    def __init__(self, input_path, output_path="", debug=False, video_save=False):
+    def __init__(self, input_path, debug=False):
         # vertical distance, horizontal distance per pixel
         self.vertical = 0.376 # y-scale (cm/pixel)
         self.horizon = 0.159  # x-scale (cm/pixel)
@@ -29,9 +29,7 @@ class ToyProject:
 
         # global vars
         self.input_path = input_path
-        self.output_path = output_path
         self.debug = debug
-        self.video_save = video_save
 
     def launch(self):
         cap = cv2.VideoCapture(self.input_path)
@@ -59,12 +57,6 @@ class ToyProject:
         if self.debug:
             plt.ion()
             fig_debug3, ax_debug3 = plt.subplots(figsize=(5, 5))
-
-        output = None
-        if self.video_save:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            resolution = (frame_width, frame_height)
-            output = cv2.VideoWriter(self.output_path, fourcc, 24.0, resolution)
         
         pre_left_fitx, pre_left_ploty = [], []
         pre_right_fitx, pre_right_ploty = [], []
@@ -200,22 +192,24 @@ class ToyProject:
             steering_angle, lookahead_pt, heading_error = pure_pursuit(central_fitx, central_ploty, vehicle_x, vehicle_y=vehicle_y, lookahead=170.0, wheelbase=55.0)
 
             # handle undetected situation
-            if len(central_fitx) < 2:
+            if lookahead_pt==None:
                 left_fitx, left_ploty = pre_left_fitx, pre_left_ploty
                 right_fitx, right_ploty = pre_right_fitx, pre_right_ploty
                 central_fitx, central_ploty = pre_central_fitx, pre_central_ploty
                 steering_angle, lookahead_pt, heading_error = pre_steering_angle, pre_lookahead_pt, pre_heading_error
+                print('LP Point cannot be calculated. Load previous one.')
             else:
                 pre_left_fitx, pre_left_ploty = left_fitx, left_ploty
                 pre_right_fitx, pre_right_ploty = right_fitx, right_ploty
                 pre_central_fitx, pre_central_ploty = central_fitx, central_ploty
                 pre_steering_angle, pre_lookahead_pt, pre_heading_error = steering_angle, lookahead_pt, heading_error
+                print('LP Point can be calculated.')
+            print(f'Steering Angle={np.degrees(steering_angle):.1f} (deg)  Heading Error={np.degrees(heading_error):.1f} (deg)')
+            print()
 
             if self.debug:
                 debug_plotting(fig_debug3, ax_debug3, point_left, point_right, left_fitx, left_ploty, right_fitx, right_ploty, central_fitx, central_ploty, vehicle_x, vehicle_y, steering_angle, lookahead_pt, heading_error)
-        
-        if self.video_save:
-            output.release()
+
         cap.release()
         cv2.destroyAllWindows()
         if fig_debug3 is not None:
