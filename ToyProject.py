@@ -118,11 +118,7 @@ class ToyProject:
                     central_fitx, central_ploty = offset_curve(left_fitx, left_ploty, left_fit, self.dist, side='right')
                     right_fitx, right_ploty = offset_curve(central_fitx, central_ploty, left_fit, self.dist, side='right')
 
-            ### Control: Pure Pursuit
-            vehicle_x, vehicle_y  = frame2bev(frame_width/2, frame_height, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
-            vehicle_y += 90
-
-            # real world scaling
+                        # real world scaling
             if len(left_fitx):
                 left_fitx = left_fitx*self.horizon
             if len(right_fitx):
@@ -147,6 +143,10 @@ class ToyProject:
             if len(point_right):
                 for i in range(len(point_right)):
                     point_right[i] = [point_right[i][0]*self.horizon, point_right[i][1]*self.vertical]
+
+            ### Control: Pure Pursuit
+            vehicle_x, vehicle_y  = frame2bev(frame_width/2, frame_height, frame, bev_matrix=self.bev_matrix, vertical=self.vertical, horizon=self.horizon)
+            vehicle_y += 90
 
             # front center of car -> 0, 0
             # vehicle_x, vehicle_y -> 0, 90

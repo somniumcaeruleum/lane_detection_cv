@@ -128,7 +128,7 @@ def fit_lane(height, points, dim=2):
 
     fitx = []
 
-    ploty = np.linspace(-height//3, height, 50) #start, end, # of points
+    ploty = np.linspace(-height//3, height, 50) # start, end, # of points
     if len(coef):
         fitx = coef[0]*ploty**(dim-0)
         for i in range(1, dim+1):

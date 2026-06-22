@@ -3,5 +3,7 @@
 *.mp4
 *.jpeg
 *.txt
+*.docx
+*.pptx
 .venv/
 __pycache__/
